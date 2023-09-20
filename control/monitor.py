@@ -10,6 +10,11 @@ from django.conf import settings
 
 client = mqtt.Client(settings.MQTT_USER_PUB)
 
+# Constantes para umbrales de alerta
+umbral_luminosidad_baja = 10  # Umbral de luminosidad por debajo del cual se considera una alerta de luminosidad baja
+umbral_humedad_baja = 30     # Umbral de humedad por debajo del cual se considera una alerta de humedad baja
+umbral_humedad_alta = 80     # Umbral de humedad por encima del cual se considera una alerta de humedad alta
+
 
 def analyze_data():
     # Consulta todos los datos de la última hora, los agrupa por estación y variable
@@ -34,7 +39,7 @@ def analyze_data():
                 'station__location__country__name')
     alerts = 0
     for item in aggregation:
-        alert = False
+        # alert = False
 
         variable = item["measurement__name"]
         max_value = item["measurement__max_value"] or 0
@@ -45,15 +50,46 @@ def analyze_data():
         city = item['station__location__city__name']
         user = item['station__user__username']
 
-        if item["check_value"] > max_value or item["check_value"] < min_value:
-            alert = True
+        # if item["check_value"] > max_value or item["check_value"] < min_value:
+        #     alert = True
 
-        if alert:
+        # if alert:
+        #     message = "ALERT {} {} {}".format(variable, min_value, max_value)
+        #     topic = '{}/{}/{}/{}/in'.format(country, state, city, user)
+        #     print(datetime.now(), "Sending alert to {} {}".format(topic, variable))
+        #     client.publish(topic, message)
+        #     alerts += 1
+
+        # Alerta de valores máximos y mínimos
+        if item["check_value"] > max_value or item["check_value"] < min_value:
             message = "ALERT {} {} {}".format(variable, min_value, max_value)
             topic = '{}/{}/{}/{}/in'.format(country, state, city, user)
             print(datetime.now(), "Sending alert to {} {}".format(topic, variable))
             client.publish(topic, message)
             alerts += 1
+
+        # Alerta de luminosidad baja
+        if variable == "luminosidad" and item["check_value"] <= umbral_luminosidad_baja:
+            message = "ALERT {} Luminosidad baja: {}".format(variable, item["check_value"])
+            topic = '{}/{}/{}/{}/luminosidad_alert'.format(country, state, city, user)
+            print(datetime.now(), "Sending luminosidad baja alert to {} {}".format(topic, variable))
+            client.publish(topic, message)
+            alerts += 1
+
+        # Alerta de humedad baja y alta
+        if variable == "humedad":
+            if item["check_value"] < umbral_humedad_baja:
+                message = "ALERT {} Humedad baja: {}".format(variable, item["check_value"])
+                topic = '{}/{}/{}/{}/humedad_alert'.format(country, state, city, user)
+                print(datetime.now(), "Sending humedad baja alert to {} {}".format(topic, variable))
+                client.publish(topic, message)
+                alerts += 1
+            elif item["check_value"] > umbral_humedad_alta:
+                message = "ALERT {} Humedad alta: {}".format(variable, item["check_value"])
+                topic = '{}/{}/{}/{}/humedad_alert'.format(country, state, city, user)
+                print(datetime.now(), "Sending humedad alta alert to {} {}".format(topic, variable))
+                client.publish(topic, message)
+                alerts += 1
 
     print(len(aggregation), "dispositivos revisados")
     print(alerts, "alertas enviadas")
